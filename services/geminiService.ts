@@ -13,6 +13,26 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2, delay = 2000): Promise<T> {
+  let lastError: any;
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      const isRateLimit = error?.message?.includes('429') || error?.message?.includes('RESOURCE_EXHAUSTED');
+      if (isRateLimit && i < maxRetries) {
+        console.warn(`Rate limit hit, retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2; // Exponential backoff
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
 const documentToText = (doc: Document): string => {
   try {
     if (doc.type.startsWith('text/')) {
@@ -122,14 +142,14 @@ export async function analyzeSubmission(
       };
   }
 
-  const genAIResponse = await ai.models.generateContent({
+  const genAIResponse = await withRetry(() => ai.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: { parts: parts },
     config: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
     }
-  });
+  }));
   
   const responseJsonText = genAIResponse.text;
   const parsedResult: AnalysisResultData = JSON.parse(responseJsonText);
@@ -151,11 +171,11 @@ export async function analyzeSubmission(
 export async function generateSpeech(text: string): Promise<string> {
    if (!process.env.API_KEY) throw new Error("API_KEY environment variable not set");
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const response = await ai.models.generateContent({
+  const response = await withRetry(() => ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
     contents: [{ parts: [{ text: `Say it clearly and encouragingly: ${text}` }] }],
     config: { responseModalities: [Modality.AUDIO] },
-  });
+  }));
   const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
   if (!base64Audio) throw new Error("No audio data received from API.");
   return base64Audio;
@@ -177,10 +197,10 @@ export async function generateSampleAudio(lesson: Lesson, agent: AIAgent): Promi
       Question: "${lesson.question}"`
   }
   
-  const textResponse = await ai.models.generateContent({
+  const textResponse = await withRetry(() => ai.models.generateContent({
       model: 'gemini-2.5-pro',
       contents: idealAnswerPrompt,
-  });
+  }));
   const idealAnswerText = textResponse.text;
 
   return await generateSpeech(idealAnswerText);

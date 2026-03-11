@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Lesson, AnalysisResultData, AIAgent, Document as DocType } from '../types';
 import { analyzeSubmission, decode, decodeAudioData } from '../services/geminiService';
 import AnalysisResult from './AnalysisResult';
-import { BackIcon, LoadingSpinnerIcon, VideoRecorderIcon, PlayCircleIcon, SendIcon, StopCircleIcon, UploadIcon, FileAudioIcon, FileImageIcon, FileDocIcon, FileTextIcon } from './icons';
+import { BackIcon, LoadingSpinnerIcon, VideoRecorderIcon, PlayCircleIcon, SendIcon, StopCircleIcon, UploadIcon, FileAudioIcon, FileImageIcon, FileDocIcon, FileTextIcon, MonitorIcon } from './icons';
 import { translations } from '../translations';
 
 const AudioPlayer = ({ base64Data, onEnded }: { base64Data: string; onEnded: () => void }) => {
@@ -75,22 +75,30 @@ export default function LessonView({ lesson, agent, onBack, language }: LessonVi
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   
   const t = translations[language];
-  const isMediaSubmission = lesson.submissionType === 'video' || lesson.submissionType === 'audio';
+  const isMediaSubmission = ['video', 'audio', 'videoStream', 'screenShare'].includes(lesson.submissionType);
   const samplePitch = t.samplePitches?.[lesson.id];
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: true, 
-          video: lesson.submissionType === 'video' 
-      });
+      let stream: MediaStream;
+      if (lesson.submissionType === 'screenShare') {
+        stream = await navigator.mediaDevices.getDisplayMedia({ 
+            video: true,
+            audio: true 
+        });
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: true, 
+            video: lesson.submissionType === 'video' || lesson.submissionType === 'videoStream'
+        });
+      }
 
-      if (lesson.submissionType === 'video' && videoPreviewRef.current) {
+      if ((lesson.submissionType === 'video' || lesson.submissionType === 'videoStream' || lesson.submissionType === 'screenShare') && videoPreviewRef.current) {
         videoPreviewRef.current.srcObject = stream;
         videoPreviewRef.current.play();
       }
       
-      const mimeType = lesson.submissionType === 'video' ? 'video/webm' : 'audio/webm';
+      const mimeType = (lesson.submissionType === 'audio') ? 'audio/webm' : 'video/webm';
       mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
       recordedChunksRef.current = [];
       
@@ -196,8 +204,24 @@ export default function LessonView({ lesson, agent, onBack, language }: LessonVi
     }
   };
   
-  const SubmissionIcon = { video: VideoRecorderIcon, audio: FileAudioIcon, image: FileImageIcon, document: FileDocIcon, text: FileTextIcon }[lesson.submissionType];
-  const submissionTitle = { video: t.pitchRecording, audio: t.audioRecording, image: t.imageSubmission, document: t.documentSubmission, text: t.textSubmission }[lesson.submissionType];
+  const SubmissionIcon = { 
+    video: VideoRecorderIcon, 
+    videoStream: VideoRecorderIcon,
+    screenShare: MonitorIcon,
+    audio: FileAudioIcon, 
+    image: FileImageIcon, 
+    document: FileDocIcon, 
+    text: FileTextIcon 
+  }[lesson.submissionType];
+  const submissionTitle = { 
+    video: t.pitchRecording, 
+    videoStream: t.videoStream,
+    screenShare: t.screenShare,
+    audio: t.audioRecording, 
+    image: t.imageSubmission, 
+    document: t.documentSubmission, 
+    text: t.textSubmission 
+  }[lesson.submissionType];
   const submissionAccept = { image: 'image/*', document: '.pdf,.doc,.docx,.txt' }[lesson.submissionType] || undefined;
 
 
@@ -239,8 +263,8 @@ export default function LessonView({ lesson, agent, onBack, language }: LessonVi
                 
                 {/* Preview Area */}
                 <div className="aspect-video bg-black rounded-md flex items-center justify-center mb-4 overflow-hidden relative">
-                    {lesson.submissionType === 'video' && (recordingState === 'recording' || recordingState === 'idle') && <video ref={videoPreviewRef} muted className="w-full h-full object-cover" />}
-                    {lesson.submissionType === 'video' && recordingState === 'recorded' && submittedFile && <video controls src={submittedFile.url} className="w-full h-full object-contain" />}
+                    {(lesson.submissionType === 'video' || lesson.submissionType === 'videoStream' || lesson.submissionType === 'screenShare') && (recordingState === 'recording' || recordingState === 'idle') && <video ref={videoPreviewRef} muted className="w-full h-full object-cover" />}
+                    {(lesson.submissionType === 'video' || lesson.submissionType === 'videoStream' || lesson.submissionType === 'screenShare') && recordingState === 'recorded' && submittedFile && <video controls src={submittedFile.url} className="w-full h-full object-contain" />}
                     
                     {lesson.submissionType === 'audio' && recordingState === 'recording' && <div className="text-white text-lg animate-pulse">{t.recording}</div>}
                     {lesson.submissionType === 'audio' && recordingState === 'recorded' && submittedFile && <audio controls src={submittedFile.url} className="w-3/4"></audio>}
@@ -256,7 +280,8 @@ export default function LessonView({ lesson, agent, onBack, language }: LessonVi
                     
                     {recordingState === 'idle' && (
                         <div className="absolute text-gray-500 text-center">
-                            {lesson.submissionType === 'video' && t.cameraPreview}
+                            {(lesson.submissionType === 'video' || lesson.submissionType === 'videoStream') && t.cameraPreview}
+                            {lesson.submissionType === 'screenShare' && t.screenPreview}
                             {lesson.submissionType === 'audio' && t.audioPreview}
                             {(lesson.submissionType === 'image' || lesson.submissionType === 'document') && t.filePreview}
                         </div>
@@ -351,7 +376,7 @@ export default function LessonView({ lesson, agent, onBack, language }: LessonVi
                         <span>{showSampleText ? t.hideSamplePitch : t.showSamplePitch}</span>
                     </button>
                 )}
-                {lesson.sampleAudioData && (lesson.submissionType === 'video' || lesson.submissionType === 'audio') && (
+                {lesson.sampleAudioData && ['video', 'audio', 'videoStream', 'screenShare'].includes(lesson.submissionType) && (
                     <button 
                         onClick={() => setIsPlayingSample(p => !p)}
                         disabled={isPlayingSample}

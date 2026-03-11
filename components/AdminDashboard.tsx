@@ -70,26 +70,33 @@ const AgentCreator: React.FC<{ addAgent: (agent: Omit<AIAgent, 'id' | 'isSalesCo
     );
 };
 
-const LessonCreator: React.FC<{ addLesson: (lesson: Omit<Lesson, 'id' | 'sampleAudioData'>) => void, aiAgents: AIAgent[], onDone: () => void, language: string }> = ({ addLesson, aiAgents, onDone, language }) => {
-  const [title, setTitle] = useState('');
-  const [question, setQuestion] = useState('');
-  const [type, setType] = useState<'internal' | 'external'>('external');
-  const [submissionType, setSubmissionType] = useState<'video' | 'audio' | 'image' | 'document' | 'text'>('video');
-  const [agentId, setAgentId] = useState<string>(aiAgents[0]?.id || '');
-  const [knowledgeText, setKnowledgeText] = useState('');
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [weightages, setWeightages] = useState<Weightages>({ tone: 34, content: 33, approach: 33 });
-  const [passingScore, setPassingScore] = useState(75);
-  const [attemptsAllowed, setAttemptsAllowed] = useState(3);
+const LessonForm: React.FC<{ 
+    lesson?: Lesson, 
+    addLesson?: (lesson: Omit<Lesson, 'id' | 'sampleAudioData'>) => void, 
+    updateLesson?: (lesson: Lesson) => void, 
+    aiAgents: AIAgent[], 
+    onDone: () => void, 
+    language: string 
+}> = ({ lesson, addLesson, updateLesson, aiAgents, onDone, language }) => {
+  const [title, setTitle] = useState(lesson?.title || '');
+  const [question, setQuestion] = useState(lesson?.question || '');
+  const [type, setType] = useState<'internal' | 'external'>(lesson?.type || 'external');
+  const [submissionType, setSubmissionType] = useState(lesson?.submissionType || 'video');
+  const [agentId, setAgentId] = useState<string>(lesson?.agentId || aiAgents[0]?.id || '');
+  const [knowledgeText, setKnowledgeText] = useState(lesson?.knowledge?.text || '');
+  const [documents, setDocuments] = useState<Document[]>(lesson?.knowledge?.documents || []);
+  const [weightages, setWeightages] = useState<Weightages>(lesson?.weightages || { tone: 34, content: 33, approach: 33 });
+  const [passingScore, setPassingScore] = useState(lesson?.passingScore || 75);
+  const [attemptsAllowed, setAttemptsAllowed] = useState(lesson?.attemptsAllowed || 3);
   
   const t = translations[language];
   const selectedAgent = aiAgents.find(agent => agent.id === agentId);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const files = Array.from(e.target.files);
+      const files = Array.from(e.target.files) as File[];
       const newDocs: Document[] = await Promise.all(
-        files.map(async file => ({
+        files.map(async (file: File) => ({
           name: file.name,
           type: file.type,
           content: await blobToBase64(file),
@@ -138,29 +145,45 @@ const LessonCreator: React.FC<{ addLesson: (lesson: Omit<Lesson, 'id' | 'sampleA
         return;
     }
 
-    const lessonData: Omit<Lesson, 'id' | 'sampleAudioData'> = {
-        title,
-        question,
-        type,
-        submissionType,
-        agentId,
-        knowledge: { documents, text: knowledgeText },
-        attemptsAllowed,
-    };
+    if (lesson && updateLesson) {
+        const updatedLesson: Lesson = {
+            ...lesson,
+            title,
+            question,
+            type,
+            submissionType: submissionType as any,
+            agentId,
+            knowledge: { documents, text: knowledgeText },
+            attemptsAllowed,
+            weightages: selectedAgent?.isSalesCoach ? weightages : undefined,
+            passingScore: selectedAgent?.isSalesCoach ? passingScore : undefined,
+        };
+        updateLesson(updatedLesson);
+    } else if (addLesson) {
+        const lessonData: Omit<Lesson, 'id' | 'sampleAudioData'> = {
+            title,
+            question,
+            type,
+            submissionType: submissionType as any,
+            agentId,
+            knowledge: { documents, text: knowledgeText },
+            attemptsAllowed,
+        };
 
-    if (selectedAgent?.isSalesCoach) {
-        lessonData.weightages = weightages;
-        lessonData.passingScore = passingScore;
+        if (selectedAgent?.isSalesCoach) {
+            lessonData.weightages = weightages;
+            lessonData.passingScore = passingScore;
+        }
+
+        addLesson(lessonData);
     }
-
-    addLesson(lessonData);
     onDone();
   };
 
   return (
     <div className="bg-slate-800/50 rounded-lg p-6 mb-8 border border-slate-700">
       <form onSubmit={handleSubmit} className="space-y-6">
-        <h3 className="text-xl font-semibold text-violet-300">{t.createNewLesson}</h3>
+        <h3 className="text-xl font-semibold text-violet-300">{lesson ? t.editLesson : t.createNewLesson}</h3>
         
         <div className="grid md:grid-cols-2 gap-6">
             <div>
@@ -202,6 +225,8 @@ const LessonCreator: React.FC<{ addLesson: (lesson: Omit<Lesson, 'id' | 'sampleA
                 <label htmlFor="submissionType" className="block text-sm font-medium text-gray-300 mb-1">{t.submissionType}</label>
                 <select id="submissionType" value={submissionType} onChange={(e) => setSubmissionType(e.target.value as any)} className="w-full bg-slate-900 border border-slate-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-violet-500 focus:border-violet-500">
                     <option value="video">{t.video}</option>
+                    <option value="videoStream">{t.videoStream}</option>
+                    <option value="screenShare">{t.screenShare}</option>
                     <option value="audio">{t.audio}</option>
                     <option value="image">{t.image}</option>
                     <option value="document">{t.document}</option>
@@ -282,7 +307,7 @@ const LessonCreator: React.FC<{ addLesson: (lesson: Omit<Lesson, 'id' | 'sampleA
           <button type="button" onClick={onDone} className="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded-md font-semibold transition-colors">{t.cancel}</button>
           <button type="submit" className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-md font-semibold transition-colors flex items-center space-x-2">
             <PlusIcon />
-            <span>{t.createLesson}</span>
+            <span>{lesson ? t.updateLesson : t.createLesson}</span>
           </button>
         </div>
       </form>
@@ -294,6 +319,7 @@ const LessonCreator: React.FC<{ addLesson: (lesson: Omit<Lesson, 'id' | 'sampleA
 export default function AdminDashboard({ lessons, addLesson, updateLesson, aiAgents, addAgent, language }: AdminDashboardProps) {
   const [isCreatorVisible, setIsCreatorVisible] = useState(false);
   const [isAgentCreatorVisible, setIsAgentCreatorVisible] = useState(false);
+  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
   const [generating, setGenerating] = useState<Record<string, boolean>>({});
   const initialGenerationTriggered = useRef(false);
 
@@ -306,23 +332,25 @@ export default function AdminDashboard({ lessons, addLesson, updateLesson, aiAge
         if (!agent) throw new Error("Agent not found for this lesson");
         const audioData = await generateSampleAudio(lesson, agent);
         updateLesson({ ...lesson, sampleAudioData: audioData });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Audio generation failed:", error);
-        alert(`Failed to generate audio for "${lesson.title}". Please try again. Error: ${error instanceof Error ? error.message : String(error)}`);
+        let errorMessage = error instanceof Error ? error.message : String(error);
+        
+        // Check for quota exhaustion (429)
+        if (errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('quota')) {
+            errorMessage = "You have exceeded your Gemini API quota. Please wait a minute before trying again or check your billing plan.";
+        }
+        
+        alert(`Failed to generate audio for "${lesson.title}". ${errorMessage}`);
     } finally {
         setGenerating(prev => ({...prev, [lesson.id]: false}));
     }
   };
 
+  // Removed automatic generation to prevent quota exhaustion (429 errors)
+  // Admins can manually trigger generation using the button provided in the UI.
   useEffect(() => {
-    if (lessons.length > 0 && !initialGenerationTriggered.current) {
-      initialGenerationTriggered.current = true;
-      lessons.forEach(lesson => {
-        if (!lesson.sampleAudioData && (lesson.submissionType === 'video' || lesson.submissionType === 'audio')) {
-          handleGenerateAudio(lesson);
-        }
-      });
-    }
+    // This effect is now empty or can be removed if not needed for other logic.
   }, [lessons]);
 
   const getAgentTitle = (agentId: string) => aiAgents.find(a => a.id === agentId)?.title || 'Unknown Agent';
@@ -333,7 +361,7 @@ export default function AdminDashboard({ lessons, addLesson, updateLesson, aiAge
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold text-violet-400">{t.adminDashboard}</h2>
         <button
-          onClick={() => setIsCreatorVisible(!isCreatorVisible)}
+          onClick={() => { setEditingLesson(null); setIsCreatorVisible(!isCreatorVisible); }}
           className="bg-violet-600 hover:bg-violet-500 text-white font-bold py-2 px-4 rounded-lg flex items-center space-x-2 transition-transform duration-300 ease-in-out transform hover:scale-105"
         >
           <PlusIcon />
@@ -341,7 +369,16 @@ export default function AdminDashboard({ lessons, addLesson, updateLesson, aiAge
         </button>
       </div>
       
-      {isCreatorVisible && <LessonCreator addLesson={addLesson} aiAgents={aiAgents} onDone={() => setIsCreatorVisible(false)} language={language} />}
+      {(isCreatorVisible || editingLesson) && (
+        <LessonForm 
+            lesson={editingLesson || undefined}
+            addLesson={!editingLesson ? addLesson : undefined}
+            updateLesson={editingLesson ? updateLesson : undefined}
+            aiAgents={aiAgents} 
+            onDone={() => { setIsCreatorVisible(false); setEditingLesson(null); }} 
+            language={language} 
+        />
+      )}
       
       <div className="grid lg:grid-cols-3 gap-8 mt-8">
         <div className="lg:col-span-2 space-y-4">
@@ -357,8 +394,11 @@ export default function AdminDashboard({ lessons, addLesson, updateLesson, aiAge
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-700">{getAgentTitle(lesson.agentId)}</span>
                     </div>
                 </div>
-                <div className="flex-shrink-0">
-                    {(lesson.submissionType === 'video' || lesson.submissionType === 'audio') && (
+                <div className="flex items-center gap-2">
+                    <button onClick={() => setEditingLesson(lesson)} className="text-sm bg-slate-700 hover:bg-slate-600 text-violet-300 font-semibold py-1 px-3 rounded-lg transition-colors">
+                        {t.edit}
+                    </button>
+                    {['video', 'audio', 'videoStream', 'screenShare'].includes(lesson.submissionType) && (
                         generating[lesson.id] ? (
                         <div className="flex items-center space-x-2 text-cyan-300" title="Generating audio...">
                             <LoadingSpinnerIcon className="w-5 h-5 animate-spin" />

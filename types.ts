@@ -27,7 +27,7 @@ export interface Lesson {
   title: string;
   question: string;
   type: 'internal' | 'external';
-  submissionType: 'video' | 'audio' | 'image' | 'document' | 'text';
+  submissionType: 'video' | 'audio' | 'image' | 'document' | 'text' | 'videoStream' | 'screenShare';
   agentId: string;
   knowledge: {
     documents: Document[];
