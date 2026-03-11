@@ -1,0 +1,8 @@
+{
+  "name": "AI Sales Pitch Coach",
+  "description": "An AI-powered platform where administrators create sales lessons with custom scoring, and learners submit video pitches for analysis. The AI provides a detailed score, pass/fail status, and actionable feedback to help improve sales skills.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
